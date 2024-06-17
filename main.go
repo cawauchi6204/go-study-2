@@ -1,5 +1,7 @@
 package main
 
+import "strconv"
+
 type Status string
 
 type Body struct {
@@ -45,7 +47,11 @@ func (s *Student) OutputAge() {
 }
 
 func main() {
-	student := Student{ID: "1", Name: "John", Age: 30, Body: Body{Height: 170, Weight: 60}, Status: StudentStatusHighSchool}
-	student.Graduate()
-	println(student.Status)
+	var numString string = "10x0"
+	i, err := strconv.Atoi(numString)
+	if err != nil {
+		println(err)
+		return
+	}
+	println(i)
 }
