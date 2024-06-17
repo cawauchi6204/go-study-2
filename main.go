@@ -21,12 +21,17 @@ type Student struct {
 	Status Status
 }
 
-func (s Student) Graduate() {
+// レシーバーは構造体のポインタを受け取る
+// そうしないと値渡しになってしまい、メソッド内での変更が反映されない
+// どういうことかというと、この関数内でStatusを変更しても、関数を抜けた後に元の値に戻ってしまう
+// ポインタを受け取ることで、関数内での変更が元の構造体に反映される
+// なぜなら、ポインタを受け取ることで、構造体のアドレスを受け取るから
+func (s *Student) Graduate() {
 	switch s.Status {
 	case StudentStatusHighSchool:
-		println("University")
+		s.Status = StudentStatusUniversity
 	case StudentStatusUniversity:
-		println("Graduated")
+		s.Status = StatusStatusGraduate
 	case StatusStatusGraduate:
 		println("Already Graduated")
 	}
@@ -42,4 +47,5 @@ func (s *Student) OutputAge() {
 func main() {
 	student := Student{ID: "1", Name: "John", Age: 30, Body: Body{Height: 170, Weight: 60}, Status: StudentStatusHighSchool}
 	student.Graduate()
+	println(student.Status)
 }
