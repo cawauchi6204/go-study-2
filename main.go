@@ -133,6 +133,21 @@ func main() {
 		return c.JSON(http.StatusOK, users)
 	})
 
+	e.GET("/users/:id", func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		row := db.QueryRow(`SELECT id, name, age FROM users WHERE id = ?`, id)
+
+		var user User
+		if err := row.Scan(&user.ID, &user.Name, &user.Age); err != nil {
+			return echo.NewHTTPError(http.StatusNotFound, "not found")
+		}
+
+		return c.JSON(http.StatusOK, user)
+	})
+
 	e.Start(":8080")
 	// db, err := sql.Open("sqlite3", "./example.db")
 	// if err != nil {
