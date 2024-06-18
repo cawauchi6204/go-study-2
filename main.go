@@ -50,11 +50,41 @@ func main() {
 		return c.JSON(http.StatusOK, &User{ID: int(id), Name: name, Age: age})
 	})
 
+	e.PUT("/users/:id", func(c echo.Context) error {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		name := c.FormValue("name")
+		age, err := strconv.Atoi(c.FormValue("age"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		result, err := db.Exec("UPDATE users SET name = ?, age = ? WHERE id = ?", name, age, id)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+
+		// RowsAffectedメソッドで、更新された行数を取得できる
+		// Rowsが0の場合は、更新された行がない
+		rows, _ := result.RowsAffected()
+		// 更新された行数が0の場合は、エラーを返す
+		if rows == 0 {
+			return echo.NewHTTPError(http.StatusNotFound, "not found")
+		}
+
+		return c.JSON(http.StatusOK, &User{ID: id, Name: name, Age: age})
+	})
+
 	e.GET("/users", func(c echo.Context) error {
 		rows, err := db.Query("SELECT id, name, age FROM users")
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
+		// deferは、関数が終了するときに実行される
+		// この場合、rows.Close()が関数が終了するときに実行される
+		// ここに書いている理由は、rows.Close()を忘れると、リソースが解放されないため
+		// リソースが開放されないと、メモリリークが発生する
 		defer rows.Close()
 
 		users := []User{}
