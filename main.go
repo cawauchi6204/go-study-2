@@ -2,169 +2,37 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
-	"net/http"
-	"strconv"
 
-	// _をつけているのは、パッケージをインポートしているが、そのパッケージを使っていないため
-	// 内部的に使用しているため、エラーが出ないようにするため
+	"go-study/controller"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	_ "github.com/mattn/go-sqlite3"
 )
 
-// jsonタグをつけることで、json形式での出力時に指定した名前で出力される
-// jsonタグをつけないと、フィールド名で出力される
-// つまり大文字で始まるフィールド名は、jsonタグをつけないと大文字で出力される
-type User struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Age  int    `json:"age"`
-}
-
-func initDB(filepath string) *sql.DB {
-	db, err := sql.Open("sqlite3", filepath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return db
-}
-
-func validateUser(name string, age int) error {
-	if name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is empty")
-	}
-	if len(name) > 100 {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is too long")
-	}
-	if age < 0 || age >= 200 {
-		return echo.NewHTTPError(http.StatusBadRequest, "age must be between 0 and 200")
-	}
-	return nil
+func initDB() (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", "./test.db")
+	return db, err
 }
 
 func main() {
-	db := initDB("example.db")
+	db, err := initDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(db)
+
 	e := echo.New()
+
 	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-	e.DELETE("/users/:id", func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
+	taskController := controller.TaskController{}
 
-		result, err := db.Exec(`DELETE FROM users WHERE id = ?`, id)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
+	e.GET("/tasks", taskController.Get)
 
-		rowsAffected, _ := result.RowsAffected()
-		if rowsAffected == 0 {
-			return echo.NewHTTPError(http.StatusNotFound, "not found")
-		}
-
-		return c.NoContent(http.StatusNoContent)
-	})
-
-	e.POST("/users", func(c echo.Context) error {
-		name := c.FormValue("name")
-		age, _ := strconv.Atoi(c.FormValue("age"))
-
-		result, err := db.Exec(`
-			INSERT INTO users (name, age) VALUES (?, ?)`, name, age)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-
-		id, _ := result.LastInsertId()
-		// &Userとすることで、Userのポインタを返す
-		return c.JSON(http.StatusOK, &User{ID: int(id), Name: name, Age: age})
-	})
-
-	e.PUT("/users/:id", func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		name := c.FormValue("name")
-		age, err := strconv.Atoi(c.FormValue("age"))
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		if err := validateUser(name, age); err != nil {
-			return err
-		}
-		result, err := db.Exec("UPDATE users SET name = ?, age = ? WHERE id = ?", name, age, id)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-
-		// RowsAffectedメソッドで、更新された行数を取得できる
-		// Rowsが0の場合は、更新された行がない
-		rows, _ := result.RowsAffected()
-		// 更新された行数が0の場合は、エラーを返す
-		if rows == 0 {
-			return echo.NewHTTPError(http.StatusNotFound, "not found")
-		}
-
-		return c.JSON(http.StatusOK, &User{ID: id, Name: name, Age: age})
-	})
-
-	e.GET("/users", func(c echo.Context) error {
-		rows, err := db.Query("SELECT id, name, age FROM users")
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		// deferは、関数が終了するときに実行される
-		// この場合、rows.Close()が関数が終了するときに実行される
-		// ここに書いている理由は、rows.Close()を忘れると、リソースが解放されないため
-		// リソースが開放されないと、メモリリークが発生する
-		defer rows.Close()
-
-		users := []User{}
-		for rows.Next() {
-			var user User
-			if err := rows.Scan(&user.ID, &user.Name, &user.Age); err != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-			}
-			users = append(users, user)
-		}
-		return c.JSON(http.StatusOK, users)
-	})
-
-	e.GET("/users/:id", func(c echo.Context) error {
-		id, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		row := db.QueryRow(`SELECT id, name, age FROM users WHERE id = ?`, id)
-
-		var user User
-		if err := row.Scan(&user.ID, &user.Name, &user.Age); err != nil {
-			return echo.NewHTTPError(http.StatusNotFound, "not found")
-		}
-
-		return c.JSON(http.StatusOK, user)
-	})
+	e.POST("/tasks", taskController.Create)
 
 	e.Start(":8080")
-	// db, err := sql.Open("sqlite3", "./example.db")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer db.Close()
-
-	// createTableSQL := `CREATE TABLE IF NOT EXISTS users (
-	// 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-	// 			name TEXT NOT NULL,
-	// 			age INTEGER NOT NULL);
-	// 	`
-
-	// _, err = db.Exec(createTableSQL)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// println("Table created successfully")
 }
